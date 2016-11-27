@@ -1,0 +1,195 @@
+---
+title: "Statistical Analysis, MSCA 31007, Lecture 5"
+author: "Hope Foster-Reyes"
+date: "November 26, 2016"
+output: pdf_document
+geometry: margin=0.75in
+---
+
+# Analysis of Residuals of a Linear Model
+
+Understand estimation and inference for simple linear regression, including separating mixed models using volatility clustering.
+
+_Notes_
+
+* _Style Guide:_ https://google.github.io/styleguide/Rguide.xml
+
+* _Packages required: none_
+
+* _Files required: ResidualAnalysisProjectData_2.csv; store in RStudio project directory_
+
+```{r settings, echo=FALSE}
+options(scipen = 5)
+```
+
+## Method 1
+
+### 1.1 Project Data
+
+Analyze the second case data from file ResidualAnalysisProjectData_2.csv.
+
+Import and plot the sample data.
+
+```{r import}
+# Import linear model ('lm') data
+sample.data <- read.csv("ResidualAnalysisProjectData_2.csv")
+head(sample.data)
+plot(sample.data$Input,sample.data$Output, type="p",pch=19)
+par(mfrow=c(1,2))
+boxplot(sample.data$Output)
+hist(sample.data$Output)
+par(mfrow=c(1,1))
+sample.n <- length(sample.data$Input)
+```
+
+### 1.2 Estimate Linear Model
+
+Fit a linear model to the data and plot the sample and the fitted values.
+
+```{r q1.2}
+lm <- lm(Output ~ Input, sample.data)
+lm$coefficients
+matplot(sample.data$Input, cbind(sample.data$Output, lm$fitted.values),
+       type = "p", pch = 16, ylab = "Sample and Fitted Values")
+
+lm.beta0.est <- lm$coefficients[1]
+lm.beta1.est <- lm$coefficients[2]
+lm.y.fit <- sample.data$Input * lm.beta1.est + lm.beta0.est
+lm.resid <- sample.data$Output - lm.y.fit
+```
+
+Analyze the results of fitting.
+
+```{r q1.2b}
+(lm.summary <- summary(lm))
+```
+
+***Interpret the summary of the model.***
+
+#### Call
+
+The `Call` section simply reminds us of our call to the function, which provides the data and specifies which variable is our independent (predictor or input variable) and which is our dependent (response or output variable). Note that we denote this by first listing our dependent variable, followed by a tilde symbol, and finally our independent variable.
+
+#### Residuals
+
+This is followed by the `Residuals` section which provides the five number summary of the residuals. What may be interesting to us here is that the summary is nearly symmetrical, the quartiles seem to divide the data nearly evenly, and the two quartiles close to the median have a smaller spread than those further away, indicating that the data is not spread uniformly throughout the distribution but is clustered near the center as in a normal distribution. Some quick plots further explore the residuals:
+
+```{r q1.2-plot}
+par(mfrow=c(1,2))
+boxplot(lm.resid)
+hist(lm.resid)
+par(mfrow=c(1,1))
+```
+
+#### Coefficients
+
+Next, the `Coefficients` section lists our estimated linear coefficients. The first will always be our Intercept (which, essentially, is a coefficient to the number 1), followed by the coefficients of our remaining predictor variables. In this case there is only one predictor variable, which we labeled Input. Our Input coefficient, is positive, leading to a positive correlation between Input (X) and Output (Y), which is also demonstrated by our plots above.
+
+The `Pr(>|t|)` column of the Coefficients section tells us the probability of obtaining our data if the null hypothesis were true, in this case if the coefficients were actually zero. In our case the p-value of $a$ or our Input coefficient is quite low and statistically significant, indicating the utility of our model. 
+
+We can be less confident of our intercept, with a p-value of 0.523. This may warrant further investigation. 
+
+#### Model
+
+Our summary output includes this calculation of the residual standard deviation, or $\sigma$. It is worth noting that [R documentation](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/sigma.html) states that the term "residual standard error" that we see in our `summary` output is a misnomer, and the proper term is residual standard deviation.
+
+This figure, `r round(lm.summary$sigma, 3)`, describes the amount that the residuals vary or spread from their mean, which is theoretically zero, and hence the amount that our output variable varies or spreads from a pure linear relationship with our input variable(s). Placing this value in the context of our model, we have the following equation describing our estimate of the variation in Output:
+
+$Output = `r round(lm.beta1.est, 3)` \cdot Input + `r round(lm.beta0.est, 3)` + e$
+
+$e \sim Norm(0, `r round(lm.summary$sigma, 3)`)$
+
+R-squared in the summary output (also notated as $r^{2}$ or $\rho^{2}$) is our "coefficient of determination" or "squared correlation coefficient". Whereas the correlation coefficient, "r" measures the strength and the direction of a linear relationship between two variables, the square of the correlation coefficient, "r squared", which we see in our summary, measures the proportion of our data that is explained by the linear relationship. Thus r-squared can be considered one estimate of the "predictive power" of our model. 
+
+In this case roughly 84% of the variation in our Output is explained by our linear model of:
+
+The p-value of the model itself is found in the F-statistic section. Our p-value is quite low indicating statistical significance in our linear model.
+
+Thus our model explains roughtly 84% of our variation and has a statistically significant relationship between Input and Output, however our intercept estimate is not statistically significant. In other words, we are quite confident of the slope of our line, yet we're not so sure about its intercept. 
+
+The wide gap in p-value between slope and intercept is worth further investigation.
+
+***Analyze the residuals, plot them, and their probability density function.***
+
+```{r q1.2-resid}
+all.equal(as.vector(lm$residuals), lm.resid)
+all.equal(as.vector(lm$fitted.values), lm.y.fit)
+
+lm.resid <- lm$residuals
+plot(sample.data$Input, lm.resid)
+
+lm.resid.density <- density(lm.resid)
+plot(lm.resid.density, ylim = c(0, 0.5))
+lines(lm.resid.density$x,
+      dnorm(lm.resid.density$x, mean = mean(lm.resid), sd = sd(lm.resid)))
+```
+
+***What does the pattern of residuals and the pattern of the data tell you about the sample?***
+
+The plot of the data show a distinct split of the y values into two parts as the x values become higher. This same pattern can be seen in the residuals though less distinctly. When looking at the density chart of the residuals, we see multiple peaks indicating we are possibly looking at more than one distribution.
+
+We can guess that we are looking at a mixed model of two distict distributions. 
+
+***What kind of mixture of two models do you see in the data?***
+
+Judging from the plot of the data, these separate populations (models) have a different slope, unlike our previous model in which they appeared to have the same slope but different intercepts. Both appear to be normal (Gaussian).
+
+## 1.3 Creating a training sample for separation of mixed models
+
+Try to separate the subsamples with different models.
+
+Create training sample with `Input >= 5` and separate the points above the fitted line and below.
+
+```{r q1.3a}
+# Create vectors for 3 training samples, each with a column of our Input values,
+#   followed by a column of NA values
+sample.na <- rep(NA, sample.n)
+sample.training <- data.frame(trainInput = sample.data$Input, trainOutput = sample.na)
+sample.training.steep <- data.frame(trainSteepInput = sample.data$Input, 
+                                    trainSteepOutput = sample.na)
+sample.training.flat <- data.frame(trainFlatInput = sample.data$Input, 
+                                   trainFlatOutput = sample.na)
+
+head(cbind(sample.data, sample.training, sample.training.steep, sample.training.flat))
+```
+
+Select parts of the sample with `Input` greater than 5 and `Output` either above the estimated regression line or below it.
+
+```{r q1.3b}
+# Create a selector for Input >= 5, focusing only on the right area of the plot
+selector.training.base <- sample.data$Input >= 5
+
+# Create a selector meeting the above criteria, plus Output above the fitted y line
+selector.training.steep <- selector.training.base & (sample.data$Output > lm$fitted.values)
+
+# Create a selector meeting the above criteria, plus Output above the fitted y line
+selector.training.flat <- selector.training.base & (sample.data$Output <= lm$fitted.values)
+
+# Replace the NA values in our earlier training vectors with the qualified Output values
+#   based on our selectors
+sample.training[selector.training.base, 2] <- sample.data[selector.training.base, 2]
+sample.training.steep[selector.training.steep, 2] <- sample.data[selector.training.steep, 2]
+sample.training.flat[selector.training.flat, 2] <- sample.data[selector.training.flat, 2]
+
+head(sample.training)
+head(cbind(sample.data, sample.training, sample.training.steep, sample.training.flat), 10)
+
+plot(sample.training$trainInput, sample.training$trainOutput, 
+     pch = 16, ylab = "Training Sample Output", xlab="Training Sample Input")
+points(sample.training.steep$trainSteepInput, sample.training.steep$trainSteepOutput, pch = 20, col = "green")
+points(sample.training.flat$trainFlatInput, sample.training.flat$trainFlatOutput, pch = 20, col = "blue")
+```
+
+## 1.4 Fit linear models to train samples
+
+Fit linear models to both training samples, interpret the summaries of both models.
+
+```{r q1.4}
+lm.steep <- lm(trainSteepOutput ~ trainSteepInput, sample.training.steep)
+lm.steep.summary <- summary(lm.steep)
+lm.flat <- lm(trainFlatOutput ~ trainFlatInput, sample.training.flat)
+lm.flat.summary <- summary(lm.flat)
+
+
+```
+
