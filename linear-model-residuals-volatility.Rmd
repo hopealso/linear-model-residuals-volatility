@@ -42,7 +42,7 @@ par(mfrow=c(1,1))
 sample.n <- length(sample.data$Input)
 ```
 
-### 1.2 Estimate Linear Model
+### 1.2 Estimate Linear Model Based on Raw Sample Data
 
 Fit a linear model to the data and plot the sample and the fitted values.
 
@@ -52,9 +52,9 @@ lm.raw$coefficients
 matplot(sample.data$Input, cbind(sample.data$Output, lm.raw$fitted.values),
         type = "p", pch = 16, ylab = "Sample and Fitted Values")
 
-lm.raw.beta0.est <- lm.raw$coefficients[1]
-lm.raw.beta1.est <- lm.raw$coefficients[2]
-lm.raw.y.fit <- sample.data$Input * lm.raw.beta1.est + lm.raw.beta0.est
+lm.raw.beta0 <- lm.raw$coefficients[1]
+lm.raw.beta1 <- lm.raw$coefficients[2]
+lm.raw.y.fit <- sample.data$Input * lm.raw.beta1 + lm.raw.beta0
 lm.raw.resid <- sample.data$Output - lm.raw.y.fit
 ```
 
@@ -95,7 +95,7 @@ Our summary output includes this calculation of the residual standard deviation,
 
 This figure, `r round(lm.raw.summary$sigma, 3)`, describes the amount that the residuals vary or spread from their mean, which is theoretically zero, and hence the amount that our output variable varies or spreads from a pure linear relationship with our input variable(s). Placing this value in the context of our model, we have the following equation describing our estimate of the variation in Output:
 
-$Output = `r round(lm.raw.beta1.est, 3)` \cdot Input + `r round(lm.raw.beta0.est, 3)` + e$
+$Output = `r round(lm.raw.beta1, 3)` \cdot Input + `r round(lm.raw.beta0, 3)` + e$
 
 $e \sim Norm(0, `r round(lm.raw.summary$sigma, 3)`)$
 
@@ -134,7 +134,7 @@ We can guess that we are looking at a mixed model of two distict distributions.
 
 Judging from the plot of the data, these separate populations (models) have a different slope, unlike our previous model in which they appeared to have the same slope but different intercepts. Both appear to be normal (Gaussian).
 
-## 1.3 Creating a training sample for separation of mixed models
+## 1.3 Creating training samples for separation of mixed models
 
 Try to separate the subsamples with different models.
 
@@ -165,7 +165,7 @@ selector.training.steep <- selector.training.base & (sample.data$Output > lm.raw
 # Create a selector meeting the above criteria, plus Output above the fitted y line
 selector.training.flat <- selector.training.base & (sample.data$Output <= lm.raw$fitted.values)
 
-# Replace the NA values in our earlier training vectors with the qualified Output values
+# Replace the NA values in our earlier training data frames with the qualified Output values
 #   based on our selectors
 sample.training[selector.training.base, 2] <- sample.data[selector.training.base, 2]
 sample.training.steep[selector.training.steep, 2] <- sample.data[selector.training.steep, 2]
@@ -180,7 +180,7 @@ points(sample.training.steep$trainSteepInput, sample.training.steep$trainSteepOu
 points(sample.training.flat$trainFlatInput, sample.training.flat$trainFlatOutput, pch = 20, col = "blue")
 ```
 
-## 1.4 Fit linear models to train samples
+## 1.4 Fit linear models to the training samples
 
 Fit linear models to both training samples.
 
@@ -245,9 +245,11 @@ F p-value | `r round(lm.pf, 4)` | `r round(lm.training.steep.pf, 4)` | `r round(
 
 ??? XXX ???
 
+## Separate the original data using the training samples
+
 Plot the entire sample with the fitted regression lines estimated from both training subsamples.
 
-```{r q1.4-plot}
+```{r training-plot}
 lm.training.steep.predict <- predict(lm.training.steep, 
                              data.frame(trainSteepInput=sample.data$Input), 
                              interval="prediction")
@@ -257,5 +259,34 @@ lm.training.flat.predict <- predict(lm.training.flat,
 plot(sample.data$Input, sample.data$Output, type="p", pch=19)
 lines(sample.data$Input, lm.training.steep.predict[,1], col="red", lwd=3)
 lines(sample.data$Input, lm.training.flat.predict[,1], col="green", lwd=3)
+```
+
+Separate the entire sample using the estimated train linear models.
+
+```{r training-separate}
+# Create regression lines for the steeper training sample and the flatter training sample
+line.steep <- sample.data$Input * lm.training.steep$coefficients[2] + lm.training.steep$coefficients[1]
+line.flat <- sample.data$Input * lm.training.flat$coefficients[2] + lm.training.flat$coefficients[1]
+
+# Define the distances from each Output point to both estimated training lines
+deviation.steep <- sample.data$Output - line.steep
+deviation.flat <- sample.data$Output - line.flat
+
+# Define separating sequence which equals TRUE if observation belongs to model with steeper slope 
+#   and FALSE otherwise.
+selector.steep <- deviation.steep < deviation.flat
+
+# Create vectors for 2 subsamples, each with a column of our Input values,
+#   followed by a column of NA values
+sample.steep <- data.frame(steepInput = sample.data$Input, 
+                           steepOutput = sample.na)
+sample.flat <- data.frame(flatInput = sample.data$Input, 
+                          flatOutput = sample.na)
+
+# Replace the NA values in our earlier training data frames with the qualified Output values
+#   based on our selector sequence
+#  (Note: In this case we are creating the entire sample, not just the portion >5 as above.)
+sample.steep[selector.steep, 2] <- sample.data[selector.steep, 2]
+sample.flat[!selector.steep, 2] <- sample.data[!selector.steep, 2]
 ```
 
