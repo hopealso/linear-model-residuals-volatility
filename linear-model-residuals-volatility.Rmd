@@ -14,12 +14,13 @@ _Notes_
 
 * _Style Guide:_ https://google.github.io/styleguide/Rguide.xml
 
-* _Packages required: none_
+* _Packages required: fitdistrplus_
 
 * _Files required: ResidualAnalysisProjectData_2.csv; store in RStudio project directory_
 
 ```{r settings, echo=FALSE}
 options(scipen = 5)
+suppressWarnings(library(fitdistrplus))
 ```
 
 ## Method 1
@@ -134,7 +135,7 @@ We can guess that we are looking at a mixed model of two distict distributions.
 
 Judging from the plot of the data, these separate populations (models) have a different slope, unlike our previous model in which they appeared to have the same slope but different intercepts. Both appear to be normal (Gaussian).
 
-## 1.3 Creating training samples for separation of mixed models
+### 1.3 Create training samples for separation of mixed models
 
 Try to separate the subsamples with different models.
 
@@ -180,7 +181,7 @@ points(sample.training.steep$trainSteepInput, sample.training.steep$trainSteepOu
 points(sample.training.flat$trainFlatInput, sample.training.flat$trainFlatOutput, pch = 20, col = "blue")
 ```
 
-## 1.4 Fit linear models to the training samples
+### 1.4 Fit linear models to the training samples
 
 Fit linear models to both training samples.
 
@@ -229,7 +230,7 @@ t5.3 <- round(lm.training.steep.summary$fstatistic[1])
 t5.4 <- round(lm.training.flat.summary$fstatistic[1])
 ```
 
-Estimate | Linear Model | Linear Model Steep | Linear Model Flat
+Estimate | Linear Model | Training Sample Steep | Training Sample Flat
 ---------|--------------|-----------------------|----------------------
 `r dimnames(lm.raw.summary$coefficients)[[1]][1]` estimate | `r t00.2` | `r t00.3` | `r t00.4`
 `r dimnames(lm.raw.summary$coefficients)[[1]][2]` estimate | `r t01.2` | `r t01.3` | `r t01.4`
@@ -245,7 +246,7 @@ F p-value | `r round(lm.pf, 4)` | `r round(lm.training.steep.pf, 4)` | `r round(
 
 ??? XXX ???
 
-## Separate the original data using the training samples
+### Separate the original data using the training samples
 
 Plot the entire sample with the fitted regression lines estimated from both training subsamples.
 
@@ -269,8 +270,8 @@ line.steep <- sample.data$Input * lm.training.steep$coefficients[2] + lm.trainin
 line.flat <- sample.data$Input * lm.training.flat$coefficients[2] + lm.training.flat$coefficients[1]
 
 # Define the distances from each Output point to both estimated training lines
-deviation.steep <- sample.data$Output - line.steep
-deviation.flat <- sample.data$Output - line.flat
+deviation.steep <- abs(sample.data$Output - line.steep)
+deviation.flat <- abs(sample.data$Output - line.flat)
 
 # Define separating sequence which equals TRUE if observation belongs to model with steeper slope 
 #   and FALSE otherwise.
@@ -288,5 +289,155 @@ sample.flat <- data.frame(flatInput = sample.data$Input,
 #  (Note: In this case we are creating the entire sample, not just the portion >5 as above.)
 sample.steep[selector.steep, 2] <- sample.data[selector.steep, 2]
 sample.flat[!selector.steep, 2] <- sample.data[!selector.steep, 2]
+
+head(cbind(sample.data, sample.steep, sample.flat))
 ```
 
+Plot the two samples.
+
+```{r separated-plot}
+matplot(sample.data$Input,
+        cbind(sample.data$Output, sample.steep$steepOutput, sample.flat$flatOutput),
+        type="p", col=c("black","green","blue"), pch=16, ylab="Separated Subsamples")
+```
+
+Find the mixing probability. Run binomial test for the null hypothesis p=0.5 and two-sided alternative “p is not equal to 0.5”. 
+
+```{r separated-probability}
+(mixing.probability.steep <- sum(selector.steep) / length(selector.steep))
+
+binom.test(sum(selector.steep), sample.n, p = 0.5)
+```
+
+***Interpret the output of binom.test.***
+
+??? XXX
+
+***What do you conclude from the test results?***
+
+??? XXX
+
+1.5 Fit models to separated samples
+
+Estimate linear models for separated subsamples.
+
+```{r q1.5}
+lm.steep <- lm(sample.steep$steepOutput ~ sample.steep$steepInput, sample.steep)
+lm.steep.summary <- summary(lm.steep)
+lm.flat <- lm(sample.flat$flatOutput ~ sample.flat$flatInput, sample.flat)
+lm.flat.summary <- summary(lm.flat)
+```
+
+Print out coefficients for both separated models. Check the summaries.
+
+```{r q1.5-coef}
+rbind("Steep Coefficients"=lm.steep$coefficients, "Flat Coefficients"=lm.flat$coefficients)
+lm.steep.summary$r.squared
+lm.flat.summary$r.squared
+```
+
+### 1.6 Analyze the residuals
+
+Compare the residuals of separated models with the residuals of the single model.
+
+```{r q1.6-plot}
+lm.unscrambled.resid <- c(lm.steep.summary$residuals, lm.flat.summary$residuals)
+matplot(sample.data$Input,
+        cbind(lm.unscrambled.resid, lm.raw.resid),
+        type="p", pch=c(19,16), ylab="Residuals before and after unscrambling")
+legend("bottomleft", legend=c("Before","After"), col=c("red","black"),pch=16)
+```
+
+Estimate standard deviations of the residuals.
+
+```{r q1.6-sd}
+apply(cbind("Residuals After"=lm.unscrambled.resid, 
+            "Residuals Before"=lm.raw.resid),
+      2, sd)
+```
+
+Check assumptions about residuals.
+
+```{r q1.6-test}
+hist(lm.unscrambled.resid)
+
+(lm.unscrambled.resid.param <- fitdistr(lm.unscrambled.resid, "normal"))
+ks.test(lm.unscrambled.resid, "pnorm", lm.unscrambled.resid.param$estimate[1])
+qqnorm(lm.unscrambled.resid)
+qqline(lm.unscrambled.resid)
+```
+
+Finally, print out the slopes and intercepts of both models.
+
+```{r q1.6-coef}
+t00.2 <- round(lm.raw$coefficients[1], 3)
+t00.3 <- round(lm.steep$coefficients[1], 3)
+t00.4 <- round(lm.flat$coefficients[1], 3)
+t01.2 <- round(lm.raw$coefficients[2], 3)
+t01.3 <- round(lm.steep$coefficients[2], 3)
+t01.4 <- round(lm.flat$coefficients[2], 3)
+```
+
+Estimate | Linear Model | Linear Model Steep | Linear Model Flat
+---------|--------------|-----------------------|----------------------
+`r dimnames(lm.raw.summary$coefficients)[[1]][1]` estimate | `r t00.2` | `r t00.3` | `r t00.4`
+`r dimnames(lm.raw.summary$coefficients)[[1]][2]` estimate | `r t01.2` | `r t01.3` | `r t01.4`
+
+## 2 Alternative Method Based on Volatility Clustering
+
+If the sample is $<y1,…,yn>$ then estimate of variance is built by averaging terms $(y_{i}-\bar{y})^{2}$ as
+
+$$\hat{\sigma}^{2}=\frac{1}{n-1}\sum_{i=1}^{n}(y_{i}-\bar{y})^{2}$$
+
+Make a plot of squared deviations $z_{i}=(y_{i}-\bar{y})^{2}$
+
+```{r q2-plot}
+plot(sample.data$Input, (sample.data$Output - mean(sample.data$Output))^2,
+     type="p", pch=19, ylab="Squared Deviations")
+```
+
+Data points on this plot seem to cluster in two or more parabolic shapes.
+
+An alternative approach to unmixing the models can be based on separating two parabolas on the data plot. The demonstration below shows the plot of squared deviations in a simple linear model with changing slope, or $\beta_{1}$ coefficient.
+
+```{r q2-plot-sq-dev, fig.height=8}
+demo.x <- runif(1000, -.5, .5)
+demo.resid.sd <- 0.5
+demo.resid <- rnorm(1000, sd = demo.resid.sd)
+demo.beta0 <- 0
+
+DemoSquaredDev <- function(beta1) {
+  demo.y <- (beta1 * demo.x) + demo.beta0 + demo.resid
+  demo.y.mean <- mean(demo.y)
+  demo.y.dev.sq <- (demo.y - demo.y.mean)^2
+  plot(demo.x, demo.y, ylim = c(-5,5),
+       main = paste("X, Y Plot\nSlope =", beta1))
+  abline(h = demo.y.mean)
+  plot(demo.x, demo.y.dev.sq, 
+       main = paste("Slope = ", beta1, "\nVariance ", round(var(demo.y),2), sep=""))
+}
+
+# Plot squared deviations in simple linear models with varying slopes
+par(mfrow=c(4,2))
+DemoSquaredDev(1)
+DemoSquaredDev(2)
+DemoSquaredDev(4)
+DemoSquaredDev(8)
+par(mfrow=c(1,1))
+```
+
+***Explain how increased slope affects variance of the output and the pattern of the variable $z_{i}$ (squared y deviation).***
+
+Our simple linear model is built on the equation:
+
+$Y <- \beta_{0} + \beta_{1} * X + \varepsilon$
+
+An increased slope, $\beta_{1}$ in the below equation will clearly increase the variance of Y, our response or ouput variable, as it is a multiplier for Y. If we consider that the mean of Y is 
+
+***What are the differences between the shapes of parabolas corresponding to a steeper slope versus flatter slope?***
+
+As the slope of the linear model becomes larger, the shape of the parabola representing the squared deviation of Y, our response variable, becomes steeper and more concave. 
+
+Separate the models using this approach.
+
+Find parabola corresponding to fitted model m1.
