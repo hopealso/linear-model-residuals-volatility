@@ -385,6 +385,8 @@ Estimate | Linear Model | Linear Model Steep | Linear Model Flat
 
 ## 2 Alternative Method Based on Volatility Clustering
 
+### 2.1 Explore the relationship between slope and squared deviation.
+
 If the sample is $<y1,…,yn>$ then estimate of variance is built by averaging terms $(y_{i}-\bar{y})^{2}$ as
 
 $$\hat{\sigma}^{2}=\frac{1}{n-1}\sum_{i=1}^{n}(y_{i}-\bar{y})^{2}$$
@@ -392,13 +394,16 @@ $$\hat{\sigma}^{2}=\frac{1}{n-1}\sum_{i=1}^{n}(y_{i}-\bar{y})^{2}$$
 Make a plot of squared deviations $z_{i}=(y_{i}-\bar{y})^{2}$
 
 ```{r q2-plot}
-plot(sample.data$Input, (sample.data$Output - mean(sample.data$Output))^2,
+lm.raw.dev.sq <- (sample.data$Output - mean(sample.data$Output))^2
+plot(sample.data$Input, lm.raw.dev.sq,
      type="p", pch=19, ylab="Squared Deviations")
 ```
 
 Data points on this plot seem to cluster in two or more parabolic shapes.
 
-An alternative approach to unmixing the models can be based on separating two parabolas on the data plot. The demonstration below shows the plot of squared deviations in a simple linear model with changing slope, or $\beta_{1}$ coefficient.
+An alternative approach to unmixing the models can be based on separating two parabolas on the data plot. 
+
+Let's demonstrate the impact of changing the slope in our linear model on our squared deviations.
 
 ```{r q2-plot-sq-dev, fig.height=8}
 demo.x <- runif(1000, -.5, .5)
@@ -414,7 +419,8 @@ DemoSquaredDev <- function(beta1) {
        main = paste("X, Y Plot\nSlope =", beta1))
   abline(h = demo.y.mean)
   plot(demo.x, demo.y.dev.sq, 
-       main = paste("Slope = ", beta1, "\nVariance ", round(var(demo.y),2), sep=""))
+       main = paste("Squared Deviation\nVariance ", round(var(demo.y),2), sep=""))
+  abline(h = var(demo.y))
 }
 
 # Plot squared deviations in simple linear models with varying slopes
@@ -428,16 +434,187 @@ par(mfrow=c(1,1))
 
 ***Explain how increased slope affects variance of the output and the pattern of the variable $z_{i}$ (squared y deviation).***
 
-Our simple linear model is built on the equation:
+Our simple linear model is built on the equation below, where $\varepsilon$ (Epsilon) is a normal variable representing randomness in our model:
 
-$Y <- \beta_{0} + \beta_{1} * X + \varepsilon$
+$Y = \beta_{0} + \beta_{1} X + \varepsilon$
 
-An increased slope, $\beta_{1}$ in the below equation will clearly increase the variance of Y, our response or ouput variable, as it is a multiplier for Y. If we consider that the mean of Y is 
+The demonstration above shows, in the right-hand column, the plot of squared deviations of a simple linear model (represented by the left-hand column) with changing slope, or $\beta_{1}$ coefficient. The horizontal lines show, respectively, the mean of Y on the left and the variance of Y on the right.
+
+* Variance
+
+An increased slope, $\beta_{1}$ in the above equation will clearly increase the variance of Y, our response or ouput variable, as it is a multiplier for Y.
+
+* Deviation
+
+If we consider that the mean of Y is a point "halfway between" our Y values, then we can appreciate that in a linear model the length of the deviations from this mean will be larger for our lowest X values, becoming smaller as we approach our central X vales, becoming smallest at the point where our mean Y crosses our mean Y, and then becoming larger as our X values increase.
+
+If we remove our Epsilon randomness this is even more evident:
+
+```{r q2-plot-abs-dev}
+demo.beta1 <- 4
+
+demo.y <- (demo.beta1 * demo.x) + demo.beta0 
+demo.y.mean <- mean(demo.y)
+demo.x.mean <- mean(demo.x)
+
+plot(demo.x, demo.y, 
+     main = paste("X, Y Plot\nSlope =", demo.beta1))
+abline(h = demo.y.mean, col="red")
+abline(v = demo.x.mean, col="blue")
+text(min(demo.x) + 0.1, demo.y.mean + 0.1, "y mean", col="red")
+text(demo.x.mean + 0.1, max(demo.y) - 0.05, "x mean", col="blue")
+
+# Compare absolute deviation with squared deviation
+par(mfrow=c(1,2))
+
+demo.y.dev.abs <- abs(demo.y - demo.y.mean)
+demo.y.md <- mean(demo.y.dev.abs)
+plot(demo.x, demo.y.dev.abs, xlim = c(-0.5, 0.5),
+     main = paste("Absolute Deviation\nMean Abs Dev ", round(demo.y.md,2), sep=""))
+abline(h = var(demo.y))
+
+demo.y.dev.sq <- (demo.y - demo.y.mean)^2
+plot(demo.x, demo.y.dev.sq, xlim = c(-0.5, 0.5),
+       main = paste("Squared Deviation\nVariance ", round(var(demo.y),2), sep=""))
+abline(h = var(demo.y))
+
+par(mfrow=c(1,1))
+```
+
+Above we see that the absolute deviation for our sloped y line from its mean is linear, following the pattern described above, whereas the squared deviation forms a parabola (due to the properties of a squared variable).
+
+Further, our matrix of varying slopes earlier shows that as the slope of the linear model becomes larger, the shape of the parabola representing the squared deviation of Y, our response variable, becomes steeper and more concave.
 
 ***What are the differences between the shapes of parabolas corresponding to a steeper slope versus flatter slope?***
 
-As the slope of the linear model becomes larger, the shape of the parabola representing the squared deviation of Y, our response variable, becomes steeper and more concave. 
+The parabolas with a steeper slope correspond to a larger slope in the linear model and a larger variation in y.
 
-Separate the models using this approach.
+### 2.2 Separate the models using this approach.
 
-Find parabola corresponding to fitted model m1.
+So, we have encountered a new method for splitting our model. 
+
+* In an earlier assignment, we fitted a y line for our model and divided the y values according to whether they were above or below this fitted line.
+
+* For this method we will calculate a parabola representing the squared deviation of our entire sample, and then divide our y values according to whether their squared deviation falls inside "steeper than" or outside "flatter than" our fit parabolic line.
+
+***Find the parabola corresponding to fitted model `m1`.***
+
+We can use the following to estimate the parabola that we will use to divide our model:
+
+$Y = \beta_{0} + \beta_{1} X + \varepsilon$
+
+$y_{i} = \beta_{0} + \beta_{1} x_{i} + \varepsilon_{i}$
+
+$\bar{y} = \beta_{0} + \frac{\beta_{1}}{n} \sum{x_{i}} + \frac{1}{n} \sum{\varepsilon_{i}}$
+
+Or we can simply estimate the parabola using the fitted y values provided earlier by `lm()`. The below shows these approaches and their equivalence.
+
+```{r q2.2-parabola}
+lm.raw.y.fit.mean.v1 <- mean(lm.raw.y.fit)
+lm.raw.y.fit.mean.v2 <- lm.raw.y.fit.mean.v1 + mean(lm.raw.resid)
+lm.raw.y.fit.mean.v3 <- lm.raw.beta0 + lm.raw.beta1 * mean(sample.data$Input) + mean(lm.raw.resid)
+
+c(lm.raw.y.fit.mean.v1, lm.raw.y.fit.mean.v2, lm.raw.y.fit.mean.v3)
+(all.equal(var(c(lm.raw.y.fit.mean.v1, lm.raw.y.fit.mean.v2, lm.raw.y.fit.mean.v3)), 0))
+
+lm.raw.dev.sq.fit <- (lm.raw.y.fit - mean(lm.raw.y.fit))^2
+
+plot(sample.data$Input, lm.raw.dev.sq,
+     type="p", pch=19, ylab="Squared Deviations")
+points(sample.data$Input, lm.raw.dev.sq.fit, pch=19, col="red")
+```
+
+Now let's create a new selector sequence that sets a value of `TRUE` for y values we suspect belong to a subset with a steeper slope and `FALSE` for values we suspect belong to a subset with a flatter slope -- this time basing our selector on their relationship to our fit squared deviation parabola ("Method 2") rather than our fit y value line ("Method 1").
+
+```{r q2.2-selector}
+selector.steep.var <- lm.raw.dev.sq > lm.raw.dev.sq.fit
+head(selector.steep.var, 10)
+```
+
+Separate the sample into steeper and flatter part and plot.
+
+```{r q2.2-separate}
+# Create vectors for 2 subsamples, each with a column of our Input values,
+#   followed by a column of NA values
+sample.steep.var <- data.frame(steepInput.var = sample.data$Input, 
+                               steepOutput.var = sample.na)
+sample.flat.var <- data.frame(flatInput.var = sample.data$Input, 
+                              flatOutput.var = sample.na)
+
+# Replace the NA values in our earlier data frames with the qualified Output values
+#   based on our selector sequence
+sample.steep.var[selector.steep.var, 2] <- sample.data[selector.steep.var, 2]
+sample.flat.var[!selector.steep.var, 2] <- sample.data[!selector.steep.var, 2]
+
+head(cbind(sample.data, sample.steep.var, sample.flat.var),10)
+
+# Plot clusters of the variance data and the separating parabola
+plot(sample.data$Input, lm.raw.dev.sq,
+     type="p", pch=19, ylab="Squared Deviations")
+points(sample.data$Input, lm.raw.dev.sq.fit, pch=19, col="red")
+points(sample.data$Input[selector.steep.var],
+       lm.raw.dev.sq[selector.steep.var], pch=19, col="blue")
+points(sample.data$Input[!selector.steep.var],
+       lm.raw.dev.sq[!selector.steep.var], pch=19, col="green")
+```
+
+Plot the unscrambled subsamples, include the original entire sample as a check.
+
+```{r q2.2-separated-plot}
+matplot(sample.data$Input, 
+        cbind(sample.data$Output,
+              sample.steep.var$steepOutput.var, 
+              sample.flat.var$flatOutput.var),
+        type="p", col=c("black","green","blue"), pch=16,
+        ylab="Separated Subsamples")
+```
+
+Note that observations corresponding to the minimum of the variance data are difficult to separate. 
+Consider omitting some observations around that point. For example, make omitted interval equal to LeftBound=-0.5, RightBound=0.5.
+
+```{r}
+# Create a selector to exclude the middle
+selector.exclude.lbound <- mean(sample.data$Input) - 0.5
+selector.exclude.rbound <- mean(sample.data$Input) + 0.5
+selector.exclude.mid <- (sample.data$Input <= selector.exclude.lbound)|
+                        (sample.data$Input >= selector.exclude.rbound)
+
+matplot(sample.data$Input[selector.exclude.mid], 
+        cbind(sample.data$Output[selector.exclude.mid],
+              sample.steep.var$steepOutput.var[selector.exclude.mid], 
+              sample.flat.var$flatOutput.var[selector.exclude.mid]),
+        type="p", col=c("black","green","blue"), pch=16,
+        ylab="Separated Subsamples")
+```
+
+### 2.3 Fit linear models to the separated samples. 
+
+Plot the data and the estimated regression lines.
+
+```{r q2.3}
+lm.steep.var <- lm(sample.steep.var$steepOutput.var ~ sample.steep.var$steepInput.var, sample.steep.var)
+lm.steep.var.summary <- summary(lm.steep.var)
+lm.flat.var <- lm(sample.flat.var$flatOutput.var ~ sample.flat.var$flatInput.var, sample.flat.var)
+lm.flat.var.summary <- summary(lm.flat.var)
+
+lm.steep.var.predict <- predict(lm.steep.var, 
+                                data.frame(steepInput.var=sample.data$Input),
+                                interval = "prediction")
+lm.flat.var.predict <- predict(lm.flat.var, 
+                               data.frame(flatInput.var=sample.data$Input),
+                               interval = "prediction")
+
+plot(sample.data$Input, sample.data$Output, type="p")
+lines(sample.data$Input, lm.steep.var.predict[,1], col="red", lwd=3)
+lines(sample.data$Input, lm.flat.var.predict[,1], col="green", lwd=3)
+```
+
+Print estimated parameters and summaries of both models.
+
+```{r q2.3-coef}
+rbind("Steep Coefficients"=lm.steep.var$coefficients, "Flat Coefficients"=lm.flat.var$coefficients)
+lm.steep.var.summary
+```
+
+
+
